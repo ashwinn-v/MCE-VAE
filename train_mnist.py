@@ -215,11 +215,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     print('loading data...')
+    c = '/content/'''
     transformation = str(args.transformation).lower()
-    mnist_SE2 = np.load('mnist_' + (transformation if transformation != 'none' else 'se2') +'_train.npy')
-    mnist_SE2_test = np.load('mnist_' + (transformation if transformation != 'none' else 'se2') +'_test.npy')[:1000]
-    mnist_SE2_init = np.load('mnist_init_' + (transformation if transformation != 'none' else 'se2') +'_train.npy')
-    mnist_SE2_init_test = np.load('mnist_init_' + (transformation if transformation != 'none' else 'se2') +'_test.npy')[:1000]
+    mnist_SE2 = np.load(c+'mnist_' + (transformation if transformation != 'none' else 'se2') +'_train.npy')
+    mnist_SE2_test = np.load(c+'mnist_' + (transformation if transformation != 'none' else 'se2') +'_test.npy')[:1000]
+    mnist_SE2_init = np.load(c+'mnist_init_' + (transformation if transformation != 'none' else 'se2') +'_train.npy')
+    mnist_SE2_init_test = np.load(c+'mnist_init_' + (transformation if transformation != 'none' else 'se2') +'_test.npy')[:1000]
 
     print('preparing dataset')
     batch_size = int(args.nBatch)
