@@ -239,6 +239,7 @@ class MCEVAE(Model):
         return M, params
 
     def reconstruct(self, z_var, z_c):
+        # concatenating the vectors of z_var and z_c
         z = torch.cat((z_var, z_c), dim=1)
         if self.invariance_decoder == 'CNN':
             x = self.sem_dec_fc(z)
