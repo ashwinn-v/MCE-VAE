@@ -7,6 +7,24 @@ from MCEVAE import MCEVAE
 from utils import load_checkpoint
 import argparse
 
+'''
+funcs:
+   train(..):
+        return
+        torch.save(state, 'models/' + modelname)
+        np.save('losses/trainloss_' + modelname.replace("_checkpoint", ""), train_loss_record)
+        np.save('losses/testloss_' + modelname.replace("_checkpoint", ""), test_loss_record)
+
+        Called funcs:
+            calcloss
+                return loss, RE/x.shape[0], divergence_var_tau, divergence_c
+            train_epoch
+                return train_loss/c, train_reco_loss/c, train_div_var_tau/c, train_div_c/c
+            test_epoch
+                return train_loss/c, train_reco_loss/c, train_div_var_tau/c, train_div_c/c
+        
+'''
+
 def calc_loss(model, x, x_init, beta=1., n_sampel=4):
     x_hat, z_var_q, z_var_q_mu, z_var_q_logvar, \
     z_c_q, z_c_q_mu, z_c_q_logvar, z_c_q_L, tau_q, tau_q_mu, tau_q_logvar, x_rec, M = model(x)
@@ -215,7 +233,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     print('loading data...')
-    c = '/content/'''
+    c = '/content/'
     transformation = str(args.transformation).lower()
     mnist_SE2 = np.load(c+'mnist_' + (transformation if transformation != 'none' else 'se2') +'_train.npy')
     mnist_SE2_test = np.load(c+'mnist_' + (transformation if transformation != 'none' else 'se2') +'_test.npy')[:1000]
