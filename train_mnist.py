@@ -26,6 +26,7 @@ funcs:
 '''
 
 def calc_loss(model, x, x_init, beta=1., n_sampel=4):
+    print('x is ', x)
     x_hat, z_var_q, z_var_q_mu, z_var_q_logvar, \
     z_c_q, z_c_q_mu, z_c_q_logvar, z_c_q_L, tau_q, tau_q_mu, tau_q_logvar, x_rec, M = model(x)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -190,7 +191,7 @@ def train(model, optim, train_data, test_data, num_epochs=20,
         test_loss_record = np.zeros(num_epochs)
     print('training...')
     N = len(train_data)
-    print(N)
+    print('Training data  ',N)
     RE_best = 10000
     output = sys.stdout
     for epoch in range(num_epochs):
