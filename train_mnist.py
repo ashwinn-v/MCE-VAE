@@ -6,7 +6,8 @@ import torch.nn.functional as F
 from MCEVAE import MCEVAE
 from utils import load_checkpoint
 import argparse
-
+from prettytable import PrettyTable 
+  
 '''
 funcs:
    train(..):
@@ -216,6 +217,8 @@ def train(n,model, optim, train_data, test_data, num_epochs=20,
     print('saving...')
     np.save('losses/trainloss_' + modelname.replace("_checkpoint", ""), train_loss_record)
     np.save('losses/testloss_' + modelname.replace("_checkpoint", ""), test_loss_record)
+    ptt=[n,train_loss, train_RE, train_div_var_tau, train_div_c,test_loss, test_RE, test_div_var_tau, test_div_c]
+    myTable.add_row(ptt)
 
 
 if __name__ == '__main__':
@@ -238,6 +241,7 @@ if __name__ == '__main__':
     c = '/content/'
     transformation = str(args.transformation).lower()
     narr = [1,2,3,4]
+    myTable = PrettyTable(['Fold', 'train_loss', 'train_RE', 'train_div_var_tau', 'train_div_c','test_loss', 'test_RE', 'test_div_var_tau', 'test_div_c']) 
     for n in narr:
         mnist_SE2 = np.load('/content/Saver/se2_fold'+str(n)+'.npy')
         mnist_SE2_test = np.load('/content/Saver/se2_test_fold'+str(n)+'.npy')[:1000]
@@ -281,3 +285,5 @@ if __name__ == '__main__':
             num_epochs = int(args.nEpochs), 
             tr_mode='new',
             beta = float(args.beta))
+    print(myTable)
+
