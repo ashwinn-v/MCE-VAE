@@ -241,7 +241,7 @@ if __name__ == '__main__':
     c = '/content/'
     transformation = str(args.transformation).lower()
     narr = [1,2,3,4]
-    myTable = PrettyTable(['Fold', 'train_loss', 'train_RE', 'train_div_var_tau', 'train_div_c','test_loss', 'test_RE', 'test_div_var_tau', 'test_div_c']) 
+    myTable = PrettyTable(['Fold', 'train_loss (ELBO)', 'train_RE (Reco Error)', 'train_div_var_tau (Disent KL)', 'train_div_c (Ent KL)','test_loss', 'test_RE', 'test_div_var_tau', 'test_div_c']) 
     for n in narr:
         mnist_SE2 = np.load('/content/Saver/se2_fold'+str(n)+'.npy')
         mnist_SE2_test = np.load('/content/Saver/se2_test_fold'+str(n)+'.npy')[:1000]
