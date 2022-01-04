@@ -254,7 +254,7 @@ if __name__ == '__main__':
     parser.add_argument("--tag", help = "tag for model name", default = "default")
     parser.add_argument("--training_mode", help = "Training mode: use supervised or unsupervised", default = "supervised")
     parser.add_argument("--beta", help = "Beta for beta-VAE training", default = 1.0)    
-    parser.add_argument("--fold", help = "k fold number", default = 0)   
+    parser.add_argument("--fold", help = "k fold number", default = 1)   
     args = parser.parse_args()
 
     print('loading data...')
