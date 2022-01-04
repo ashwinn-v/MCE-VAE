@@ -165,8 +165,27 @@ def test_epoch(data, model, beta):
     return train_loss/c, train_reco_loss/c, train_div_var_tau/c, train_div_c/c
 
 
-def train(n,model, optim, train_data, test_data, num_epochs=20, 
+def load_fold(n):
+    mnist_SE2 = np.load('/content/Saver/se2_fold'+str(n)+'.npy')
+    mnist_SE2_test = np.load('/content/Saver/se2_test_fold'+str(n)+'.npy')[:1000]
+    mnist_SE2_init = np.load('/content/Saver/se2_init_fold'+str(n)+'.npy')
+    mnist_SE2_init_test = np.load('/content/Saver/se2_init_test_fold'+str(n)+'.npy')[:1000]
+    print('preparing dataset')
+    batch_size = int(args.nBatch)
+    trans_dataset = torch.utils.data.TensorDataset(torch.from_numpy(mnist_SE2), torch.from_numpy(mnist_SE2_init))
+    trans_loader = torch.utils.data.DataLoader(trans_dataset, batch_size=batch_size)
+    trans_test_dataset = torch.utils.data.TensorDataset(torch.from_numpy(mnist_SE2_test),
+                                                        torch.from_numpy(mnist_SE2_init_test))
+    trans_test_loader = torch.utils.data.DataLoader(trans_test_dataset, batch_size=batch_size)
+
+    return trans_loader, trans_test_loader
+
+
+def train(n,model, optim, num_epochs=20, 
           tr_mode='new', beta = 1.0):
+    
+    train_data, test_data = load_fold(n)
+    
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')    
     modelname = "fold_{}_model_{}_{}_dEnt_{}_ddisEnt_{}_{}_{}_{}_checkpoint".format(str(n), model.mode, 
                                                                             model.invariance_decoder,
@@ -235,6 +254,7 @@ if __name__ == '__main__':
     parser.add_argument("--tag", help = "tag for model name", default = "default")
     parser.add_argument("--training_mode", help = "Training mode: use supervised or unsupervised", default = "supervised")
     parser.add_argument("--beta", help = "Beta for beta-VAE training", default = 1.0)    
+    parser.add_argument("--fold", help = "k fold number", default = 0)   
     args = parser.parse_args()
 
     print('loading data...')
@@ -242,48 +262,37 @@ if __name__ == '__main__':
     transformation = str(args.transformation).lower()
     narr = [1,2,3,4]
     myTable = PrettyTable(['Fold', 'train_loss (ELBO)', 'train_RE (Reco Error)', 'train_div_var_tau (Disent KL)', 'train_div_c (Ent KL)','test_loss', 'test_RE', 'test_div_var_tau', 'test_div_c']) 
-    for n in narr:
-        mnist_SE2 = np.load('/content/Saver/se2_fold'+str(n)+'.npy')
-        mnist_SE2_test = np.load('/content/Saver/se2_test_fold'+str(n)+'.npy')[:1000]
-        mnist_SE2_init = np.load('/content/Saver/se2_init_fold'+str(n)+'.npy')
-        mnist_SE2_init_test = np.load('/content/Saver/se2_init_test_fold'+str(n)+'.npy')[:1000]
-        print('preparing dataset')
-        batch_size = int(args.nBatch)
-        trans_dataset = torch.utils.data.TensorDataset(torch.from_numpy(mnist_SE2), torch.from_numpy(mnist_SE2_init))
-        trans_loader = torch.utils.data.DataLoader(trans_dataset, batch_size=batch_size)
-        trans_test_dataset = torch.utils.data.TensorDataset(torch.from_numpy(mnist_SE2_test),
-                                                            torch.from_numpy(mnist_SE2_init_test))
-        trans_test_loader = torch.utils.data.DataLoader(trans_test_dataset, batch_size=batch_size)
-        in_size = aug_dim = 28*28
-        mode = transformation.upper()
-        
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        tag = str(args.tag)
-        model = MCEVAE(in_size=in_size,
-                        aug_dim=aug_dim,
-                        latent_z_c=int(args.nCat),
-                        latent_z_var=int(args.nVar),
-                        mode=mode, 
-                        invariance_decoder='gated', 
-                        rec_loss=str(args.loss_type), 
-                        div='KL',
-                        in_dim=1, 
-                        out_dim=1, 
-                        hidden_z_c=int(args.nHiddenCat),
-                        hidden_z_var=int(args.nHiddenVar),
-                        hidden_tau=int(args.nHiddenTrans), 
-                        activation=nn.Sigmoid,
-                        training_mode=str(args.training_mode),
-                        device = device,
-                        tag = tag).to(device)
-        lr = 1e-3
-        optim = torch.optim.Adam(model.parameters(), lr=lr)
-        train(n,model = model,
-            optim = optim,
-            train_data = trans_loader, 
-            test_data = trans_test_loader, 
-            num_epochs = int(args.nEpochs), 
-            tr_mode='new',
-            beta = float(args.beta))
+    
+    in_size = aug_dim = 28*28
+    mode = transformation.upper()
+    
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    tag = str(args.tag)
+    model = MCEVAE(in_size=in_size,
+                    aug_dim=aug_dim,
+                    latent_z_c=int(args.nCat),
+                    latent_z_var=int(args.nVar),
+                    mode=mode, 
+                    invariance_decoder='gated', 
+                    rec_loss=str(args.loss_type), 
+                    div='KL',
+                    in_dim=1, 
+                    out_dim=1, 
+                    hidden_z_c=int(args.nHiddenCat),
+                    hidden_z_var=int(args.nHiddenVar),
+                    hidden_tau=int(args.nHiddenTrans), 
+                    activation=nn.Sigmoid,
+                    training_mode=str(args.training_mode),
+                    device = device,
+                    tag = tag).to(device)
+    lr = 1e-3
+    optim = torch.optim.Adam(model.parameters(), lr=lr)
+    train(n = args.fold,model = model,
+        optim = optim, 
+        num_epochs = int(args.nEpochs), 
+        tr_mode='new',
+        beta = float(args.beta))
     print(myTable)
+
+
 
