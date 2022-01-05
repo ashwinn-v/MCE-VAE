@@ -184,8 +184,8 @@ def load_fold(n):
     return trans_loader, trans_test_loader
 
 
-def train(n,params, num_epochs=20, 
-          tr_mode='new', beta = 1.0):
+def train(n,params, args, 
+          tr_mode='new', beta = 1.0, save_model= False):
     c = '/content/'
     transformation = str(args.transformation).lower()
     
@@ -193,6 +193,7 @@ def train(n,params, num_epochs=20,
     
     in_size = aug_dim = 28*28
     mode = transformation.upper()
+    num_epochs = int(args.nEpochs)
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -265,30 +266,29 @@ def train(n,params, num_epochs=20,
             state = {'epoch': epoch + 1,
                      'state_dict': model.state_dict(),
                      'optimizer': optim.state_dict()}
+            if save_model:
+                torch.save(state, 'models/' + modelname)
     #         torch.save(state, 'models/' + modelname)
     # print('saving...')
     # np.save('losses/trainloss_' + modelname.replace("_checkpoint", ""), train_loss_record)
     # np.save('losses/testloss_' + modelname.replace("_checkpoint", ""), test_loss_record)
     ptt=[n,train_loss, train_RE, train_div_var_tau, train_div_c,test_loss, test_RE, test_div_var_tau, test_div_c]
     myTable.add_row(ptt)
-    return train_loss_record, test_loss_record
+    return RE_best
 
 def objective(trial):
     narr = [1,2,3,4]
     params = {
         "hidden_z_c": trial.suggest_int("hidden_z_c",200,512),
-        "hidden_z_var": trial.suggest_int("hidden_z_c",200,512),
-        "hidden_tau": trial.suggest_int("hidden_z_c",32,128)
+        "hidden_z_var": trial.suggest_int("hidden_z_var",200,512),
+        "hidden_tau": trial.suggest_int("hidden_tau",32,128)
     }
     all_train_losses = []
-    all_test_losses = []
     for i in narr:
         print("Fold ", i)
-        temp_train_loss, test_loss_record = train(i,params, save_model=False)
-        all_train_losses.append(temp_train_loss)
-        all_test_losses.append(test_loss_record)
-    return np.mean(all_train_losses), np.mean(all_test_losses)
-
+        RE_best = train(i,params,args, save_model=False)
+        all_train_losses.append(RE_best)
+    return np.mean(all_train_losses)
 
         
 
@@ -305,8 +305,7 @@ if __name__ == '__main__':
     # parser.add_argument("--nHiddenTrans", help = "Number of Nodes in Hidden Layers for Transformational Latent Space", default = 32)
     parser.add_argument("--tag", help = "tag for model name", default = "default")
     parser.add_argument("--training_mode", help = "Training mode: use supervised or unsupervised", default = "supervised")
-    parser.add_argument("--beta", help = "Beta for beta-VAE training", default = 1.0)    
-    parser.add_argument("--fold", help = "k fold number", default = 1)   
+    parser.add_argument("--beta", help = "Beta for beta-VAE training", default = 1.0)     
     args = parser.parse_args()
     
 
@@ -319,7 +318,7 @@ if __name__ == '__main__':
     mode = transformation.upper()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    study = optuna.create_study(direction=['minimize', 'minimize'])
+    study = optuna.create_study(direction='minimize')
     study.optimize(objective, n_trials=10)
     print('best trial:')
     trial_ = study.best_trial
@@ -328,9 +327,9 @@ if __name__ == '__main__':
     scores = 0
     for i in range(1,5):
         print('Fold',i)
-        scr = train(i,trial_.params, save_model=True)
+        scr = train(i,trial_.params,args,save_model=True)
         scores += scr
-    print('Average scores',scores/4)  
+    print('Average train Reconstruction error:',scores/4)  
 
 
 
