@@ -246,7 +246,9 @@ def train(n,params, args,
     print("Training for fold", n)
     print('training...')
     N = len(train_data)
+    vv = len(test_data)
     print('Training data  ',N)
+    print('Test data  ',vv)
     RE_best = 10000
     output = sys.stdout
     for epoch in range(num_epochs):
@@ -274,6 +276,110 @@ def train(n,params, args,
     # np.save('losses/testloss_' + modelname.replace("_checkpoint", ""), test_loss_record)
     ptt=[n,train_loss, train_RE, train_div_var_tau, train_div_c,test_loss, test_RE, test_div_var_tau, test_div_c]
     myTable.add_row(ptt)
+    return RE_best
+
+def finaltrain(params, args, 
+          tr_mode='new', beta = 1.0, save_model= False):
+    c = '/content/'
+    transformation = str(args.transformation).lower()
+    
+    myTable = PrettyTable(['Fold', 'train_loss (ELBO)', 'train_RE (Reco Error)', 'train_div_var_tau (Disent KL)', 'train_div_c (Ent KL)','test_loss', 'test_RE', 'test_div_var_tau', 'test_div_c']) 
+    
+    in_size = aug_dim = 28*28
+    mode = transformation.upper()
+    num_epochs = int(args.nEpochs)
+    
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    tag = str(args.tag)
+    model = MCEVAE(in_size=in_size,
+                    aug_dim=aug_dim,
+                    latent_z_c=int(args.nCat),
+                    latent_z_var=int(args.nVar),
+                    mode=mode, 
+                    invariance_decoder='gated', 
+                    rec_loss=str(args.loss_type), 
+                    div='KL',
+                    in_dim=1, 
+                    out_dim=1, 
+                    hidden_z_c=params['hidden_z_c'],
+                    hidden_z_var=params['hidden_z_var'],
+                    hidden_tau=params['hidden_tau'], 
+                    activation=nn.Sigmoid,
+                    training_mode=str(args.training_mode),
+                    device = device,
+                    tag = tag).to(device)
+    lr = 1e-3
+    optim = torch.optim.Adam(model.parameters(), lr=lr)
+    mnist_SE2 = np.load('/content/DAT/mnist_se2.npy')
+    mnist_SE2_test = np.load('/content/DAT/mnist_se2_test.npy')[:1000]
+    mnist_SE2_init = np.load('/content/DAT/mnist_se2_init.npy')
+    mnist_SE2_init_test = np.load('/content/DAT/mnist_se2_init_test.npy')[:1000]
+    print('preparing dataset for final training')
+    batch_size = int(args.nBatch)
+    trans_dataset = torch.utils.data.TensorDataset(torch.from_numpy(mnist_SE2), torch.from_numpy(mnist_SE2_init))
+    trans_loader = torch.utils.data.DataLoader(trans_dataset, batch_size=batch_size)
+    trans_test_dataset = torch.utils.data.TensorDataset(torch.from_numpy(mnist_SE2_test),
+                                                        torch.from_numpy(mnist_SE2_init_test))
+    trans_test_loader = torch.utils.data.DataLoader(trans_test_dataset, batch_size=batch_size)
+    
+    train_data = trans_loader
+    test_data = trans_test_loader
+    
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')    
+    modelname = "model_{}_{}_dEnt_{}_ddisEnt_{}_{}_{}_{}_checkpoint".format(model.mode, 
+                                                                            model.invariance_decoder,
+                                                                            model.latent_z_c,
+                                                                            model.latent_z_var,
+                                                                            model.tag,
+                                                                            model.training_mode,
+                                                                            model.rec_loss)
+    # print(modelname)
+    if tr_mode == 'resume' and os.path.exists('models/' + modelname):
+        print("Loading old model")
+        model, optim, epoch = load_checkpoint(model, optim, 'models/' + modelname)
+        train_loss_record = np.load('losses/trainloss_' + modelname.replace("_checkpoint", "") + ".npy")
+        test_loss_record = np.load('losses/testloss_' + modelname.replace("_checkpoint", "") + ".npy")
+        n_trainrecord_old = len(train_loss_record)
+        n_testrecord_old = len(test_loss_record)
+        train_loss_record = np.append(train_loss_record, np.zeros(num_epochs))
+        test_loss_record  = np.append(test_loss_record, np.zeros(num_epochs))
+    else:
+        n_trainrecord_old = 0
+        n_testrecord_old = 0
+        train_loss_record = np.zeros(num_epochs)
+        test_loss_record = np.zeros(num_epochs)
+    print("Training with best parameters")
+    print('training...')
+    N = len(train_data)
+    vv = len(test_data)
+    print('Training data  ',N)
+    print('Test data  ',vv)
+    RE_best = 10000
+    output = sys.stdout
+    for epoch in range(num_epochs):
+        train_loss, train_RE, train_div_var_tau, train_div_c = train_epoch(train_data, model, 
+                                                                           optim, epoch, num_epochs, N, beta)
+        line = '\t'.join([str(epoch + 1), 'train', str(train_loss), str(train_RE), str(train_div_var_tau), str(train_div_c)])
+        print(line, file=output)
+        output.flush()
+        train_loss_record[n_trainrecord_old + epoch] = train_RE
+        test_loss, test_RE, test_div_var_tau, test_div_c = test_epoch(test_data, model, beta) 
+        line = '\t'.join([str(epoch + 1), 'test', str(test_loss), str(test_RE), str(test_div_var_tau), str(test_div_c)])
+        print(line, file=output)
+        output.flush()
+        test_loss_record[n_testrecord_old + epoch] = test_RE
+        if abs(RE_best) > abs(train_RE):
+            RE_best = train_RE
+            state = {'epoch': epoch + 1,
+                     'state_dict': model.state_dict(),
+                     'optimizer': optim.state_dict()}
+            if save_model:
+                torch.save(state, 'models/' + modelname)
+    #         torch.save(state, 'models/' + modelname)
+    # print('saving...')
+    # np.save('losses/trainloss_' + modelname.replace("_checkpoint", ""), train_loss_record)
+    # np.save('losses/testloss_' + modelname.replace("_checkpoint", ""), test_loss_record)
     return RE_best
 
 def objective(trial):
@@ -319,17 +425,13 @@ if __name__ == '__main__':
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     study = optuna.create_study(direction='minimize')
-    study.optimize(objective, n_trials=10)
+    study.optimize(objective, n_trials=100)
     print('best trial:')
     trial_ = study.best_trial
     print('values',trial_.values)
     print('params',trial_.params)
-    scores = 0
-    for i in range(1,5):
-        print('Fold',i)
-        scr = train(i,trial_.params,args,save_model=True)
-        scores += scr
-    print('Average train Reconstruction error:',scores/4)  
+    scr = finaltrain(trial_.params,args,save_model=True)
+    print('Final train Reconstruction error:',scr)  
 
 
 
