@@ -9,6 +9,13 @@ from MCEVAE import MCEVAE
 from utils import load_checkpoint
 import argparse
 from prettytable import PrettyTable 
+
+from ax.plot.contour import plot_contour
+from ax.plot.trace import optimization_trace_single_method
+from ax.service.managed_loop import optimize
+from ax.utils.notebook.plotting import render, init_notebook_plotting
+from ax.utils.tutorials.cnn_utils import load_mnist, train, evaluate, CNN
+
   
 '''
 funcs:
@@ -382,13 +389,8 @@ def finaltrain(params, args,
     # np.save('losses/testloss_' + modelname.replace("_checkpoint", ""), test_loss_record)
     return RE_best
 
-def objective(trial):
+def train_evaluate(params):
     narr = [1,2,3,4]
-    params = {
-        "hidden_z_c": trial.suggest_int("hidden_z_c",200,512),
-        "hidden_z_var": trial.suggest_int("hidden_z_var",200,512),
-        "hidden_tau": trial.suggest_int("hidden_tau",32,128)
-    }
     all_train_losses = []
     for i in narr:
         print("Fold ", i)
@@ -424,14 +426,15 @@ if __name__ == '__main__':
     mode = transformation.upper()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    study = optuna.create_study(direction='minimize')
-    study.optimize(objective, n_trials=100)
-    print('best trial:')
-    trial_ = study.best_trial
-    print('values',trial_.values)
-    print('params',trial_.params)
-    scr = finaltrain(trial_.params,args,save_model=True)
-    print('Final train Reconstruction error:',scr)  
-
-
-
+    best_parameters, values, experiment, model = optimize(
+        parameters=[
+            {"name": "hidden_z_c", "type": "range", "bounds": [200,512], "log_scale": False},
+            {"name": "hidden_z_var", "type": "range", "bounds": [200,512], "log_scale": False},
+            {"name": "hidden_tau", "type": "range", "bounds": [32,128], "log_scale": False},
+        ],
+        evaluation_function=train_evaluate,
+        objective_name='accuracy',
+    )
+    print(best_parameters)
+    # scr = finaltrain(trial_.params,args,save_model=True)
+    # print('Final train Reconstruction error:',scr) 
