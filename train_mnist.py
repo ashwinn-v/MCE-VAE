@@ -433,8 +433,9 @@ if __name__ == '__main__':
             {"name": "hidden_tau", "type": "range", "bounds": [32,128], "log_scale": False},
         ],
         evaluation_function=train_evaluate,
-        objective_name='accuracy',
+        total_trials = 1,
     )
     print(best_parameters)
+    
     # scr = finaltrain(trial_.params,args,save_model=True)
     # print('Final train Reconstruction error:',scr) 
