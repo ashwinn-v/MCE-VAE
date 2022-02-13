@@ -9,6 +9,7 @@ from MCEVAE import MCEVAE
 from utils import load_checkpoint
 import argparse
 from prettytable import PrettyTable 
+import matplotlib.pyplot as plt
   
 '''
 funcs:
@@ -357,6 +358,7 @@ def finaltrain(params, args,
     print('Test data  ',vv)
     RE_best = 10000
     output = sys.stdout
+    loosses = []
     for epoch in range(num_epochs):
         train_loss, train_RE, train_div_var_tau, train_div_c = train_epoch(train_data, model, 
                                                                            optim, epoch, num_epochs, N, beta)
@@ -369,6 +371,7 @@ def finaltrain(params, args,
         print(line, file=output)
         output.flush()
         test_loss_record[n_testrecord_old + epoch] = test_RE
+        running_loss += train_RE * train_data.size(0) 
         if abs(RE_best) > abs(train_RE):
             RE_best = train_RE
             state = {'epoch': epoch + 1,
@@ -376,6 +379,9 @@ def finaltrain(params, args,
                      'optimizer': optim.state_dict()}
             if save_model:
                 torch.save(state, 'models/' + modelname)
+        epoch_loss = running_loss / len(train_data)
+        loosses.append(epoch_loss)
+    plt.plot(np.array(loosses), 'r')
     #         torch.save(state, 'models/' + modelname)
     # print('saving...')
     # np.save('losses/trainloss_' + modelname.replace("_checkpoint", ""), train_loss_record)
