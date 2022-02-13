@@ -192,7 +192,7 @@ def train(n,params, args,
     
     myTable = PrettyTable(['Fold', 'train_loss (ELBO)', 'train_RE (Reco Error)', 'train_div_var_tau (Disent KL)', 'train_div_c (Ent KL)','test_loss', 'test_RE', 'test_div_var_tau', 'test_div_c']) 
     
-    in_size = aug_dim = 28*28
+    in_size = aug_dim = 40*40
     mode = transformation.upper()
     num_epochs = int(args.nEpochs)
     
@@ -286,7 +286,7 @@ def finaltrain(params, args,
     
     myTable = PrettyTable(['Fold', 'train_loss (ELBO)', 'train_RE (Reco Error)', 'train_div_var_tau (Disent KL)', 'train_div_c (Ent KL)','test_loss', 'test_RE', 'test_div_var_tau', 'test_div_c']) 
     
-    in_size = aug_dim = 28*28
+    in_size = aug_dim = 40*40
     mode = transformation.upper()
     num_epochs = int(args.nEpochs)
     
@@ -312,10 +312,10 @@ def finaltrain(params, args,
                     tag = tag).to(device)
     lr = 1e-3
     optim = torch.optim.Adam(model.parameters(), lr=lr)
-    mnist_SE2 = np.load('/content/DAT/mnist_se2.npy')
-    mnist_SE2_test = np.load('/content/DAT/mnist_se2_test.npy')[:1000]
-    mnist_SE2_init = np.load('/content/DAT/mnist_se2_init.npy')
-    mnist_SE2_init_test = np.load('/content/DAT/mnist_se2_init_test.npy')[:1000]
+    mnist_SE2 = np.load('/content/DAT/galaxy_se2.npy')
+    mnist_SE2_test = np.load('/content/DAT/galaxy_se2_test.npy')[:1000]
+    mnist_SE2_init = np.load('/content/DAT/galaxy_se2_init.npy')
+    mnist_SE2_init_test = np.load('/content/DAT/galaxy_se2_init_test.npy')[:1000]
     print('preparing dataset for final training')
     batch_size = int(args.nBatch)
     trans_dataset = torch.utils.data.TensorDataset(torch.from_numpy(mnist_SE2), torch.from_numpy(mnist_SE2_init))
@@ -359,6 +359,7 @@ def finaltrain(params, args,
     RE_best = 10000
     output = sys.stdout
     loosses = []
+    running_loss = 0
     for epoch in range(num_epochs):
         train_loss, train_RE, train_div_var_tau, train_div_c = train_epoch(train_data, model, 
                                                                            optim, epoch, num_epochs, N, beta)
@@ -371,7 +372,7 @@ def finaltrain(params, args,
         print(line, file=output)
         output.flush()
         test_loss_record[n_testrecord_old + epoch] = test_RE
-        running_loss += train_RE * train_data.size(0) 
+        # running_loss += train_RE * len(train_data)
         if abs(RE_best) > abs(train_RE):
             RE_best = train_RE
             state = {'epoch': epoch + 1,
@@ -379,9 +380,10 @@ def finaltrain(params, args,
                      'optimizer': optim.state_dict()}
             if save_model:
                 torch.save(state, 'models/' + modelname)
-        epoch_loss = running_loss / len(train_data)
-        loosses.append(epoch_loss)
+        # epoch_loss = running_loss / len(train_data)
+        loosses.append(train_RE)
     plt.plot(np.array(loosses), 'r')
+    plt.savefig('/content/Saver/plot.png')
     #         torch.save(state, 'models/' + modelname)
     # print('saving...')
     # np.save('losses/trainloss_' + modelname.replace("_checkpoint", ""), train_loss_record)
@@ -426,12 +428,12 @@ if __name__ == '__main__':
     
     myTable = PrettyTable(['Fold', 'train_loss (ELBO)', 'train_RE (Reco Error)', 'train_div_var_tau (Disent KL)', 'train_div_c (Ent KL)','test_loss', 'test_RE', 'test_div_var_tau', 'test_div_c']) 
     
-    in_size = aug_dim = 28*28
+    in_size = aug_dim = 40*40
     mode = transformation.upper()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     study = optuna.create_study(direction='minimize')
-    study.optimize(objective, n_trials=100)
+    study.optimize(objective, n_trials=1)
     print('best trial:')
     trial_ = study.best_trial
     print('values',trial_.values)
