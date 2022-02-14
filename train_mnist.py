@@ -384,10 +384,13 @@ def finaltrain(params, args,
         loosses.append(train_RE)
     plt.plot(np.array(loosses), 'r')
     plt.savefig('/content/Saver/plot.png')
-    #         torch.save(state, 'models/' + modelname)
-    # print('saving...')
+    torch.save(state, 'models/' + modelname)
+    print('saving...')
     # np.save('losses/trainloss_' + modelname.replace("_checkpoint", ""), train_loss_record)
     # np.save('losses/testloss_' + modelname.replace("_checkpoint", ""), test_loss_record)
+    # /content/MCE-VAE/losses
+    np.save('/content/MCE-VAE/losses/trainloss_', train_loss_record)
+    np.save('/content/MCE-VAE/losses/testloss_', test_loss_record)
     return RE_best
 
 def objective(trial):
@@ -433,7 +436,7 @@ if __name__ == '__main__':
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     study = optuna.create_study(direction='minimize')
-    study.optimize(objective, n_trials=1)
+    study.optimize(objective, n_trials=10)
     print('best trial:')
     trial_ = study.best_trial
     print('values',trial_.values)

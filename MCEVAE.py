@@ -9,7 +9,7 @@ from utils import  NonLinear, GatedDense
 
 class MCEVAE(Model):
     def __init__(self, 
-                 in_size=28*28,
+                 in_size=40*40,
                  aug_dim=16*7*7,
                  latent_z_c=0,
                  latent_z_var=5,
