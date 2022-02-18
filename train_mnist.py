@@ -192,7 +192,7 @@ def train(n,params, args,
     
     myTable = PrettyTable(['Fold', 'train_loss (ELBO)', 'train_RE (Reco Error)', 'train_div_var_tau (Disent KL)', 'train_div_c (Ent KL)','test_loss', 'test_RE', 'test_div_var_tau', 'test_div_c']) 
     
-    in_size = aug_dim = 40*40
+    in_size = aug_dim = 64*64
     mode = transformation.upper()
     num_epochs = int(args.nEpochs)
     
@@ -286,7 +286,7 @@ def finaltrain(params, args,
     
     myTable = PrettyTable(['Fold', 'train_loss (ELBO)', 'train_RE (Reco Error)', 'train_div_var_tau (Disent KL)', 'train_div_c (Ent KL)','test_loss', 'test_RE', 'test_div_var_tau', 'test_div_c']) 
     
-    in_size = aug_dim = 40*40
+    in_size = aug_dim = 64*64
     mode = transformation.upper()
     num_epochs = int(args.nEpochs)
     
@@ -431,7 +431,7 @@ if __name__ == '__main__':
     
     myTable = PrettyTable(['Fold', 'train_loss (ELBO)', 'train_RE (Reco Error)', 'train_div_var_tau (Disent KL)', 'train_div_c (Ent KL)','test_loss', 'test_RE', 'test_div_var_tau', 'test_div_c']) 
     
-    in_size = aug_dim = 40*40
+    in_size = aug_dim = 64*64
     mode = transformation.upper()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
