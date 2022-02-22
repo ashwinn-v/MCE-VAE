@@ -29,6 +29,13 @@ funcs:
         
 '''
 
+'''
+Func: calc_loss
+Function for calcuating the loss at each epoch
+Returns the train loss, Reconstruction loss, divergence_var_tau, divergence_c
+
+'''
+
 
 def calc_loss(model, x, x_init, beta=1., n_sampel=4):
     # print('x is ', x.size())
@@ -48,14 +55,20 @@ def calc_loss(model, x, x_init, beta=1., n_sampel=4):
             RE_INV = torch.FloatTensor([0.]).to(device)
             for jj in range(25):
                 with torch.no_grad():
+                    # add noise to the input and tau transform
                     x_arb = model.get_x_ref(x.view(-1,1,int(np.sqrt(model.in_size)),int(np.sqrt(model.in_size))), tau_q)
+                    # returning the augmented varable from the learnt augmented encoder
                     z_aug_arb = model.aug_encoder(x_arb)
+                    # Sampling the mean and variance from learnt Multi cluster extractor
                     z_c_q_mu_arb, z_c_q_logvar_arb, _ = model.q_z_c(z_aug_arb)
                     z_c_q_arb = model.reparameterize(z_c_q_mu_arb, z_c_q_logvar_arb).to(device)
+                    # Sampling from variational extractor
                     z_var_q_mu_arb, z_var_q_logvar_arb = model.q_z_var(z_aug_arb)
                     z_var_q_arb = model.reparameterize(z_var_q_mu_arb, z_var_q_logvar_arb).to(device)
+                    # reconstructing the original image from sampled vectors
                     x_init, _ = model.reconstruct(z_var_q_arb, z_c_q_arb)
                     x_init = x_init.view(-1, model.in_size).to(device)
+                    #Mapping elements to a range
                     x_init = torch.clamp(x_init, 1.e-5, 1-1.e-5)
                 RE_INV = RE_INV + torch.sum((z_var_q_arb - z_var_q)**2)
                 RE_INV = RE_INV + torch.sum((z_c_q_arb - z_c_q)**2) 
@@ -85,6 +98,7 @@ def calc_loss(model, x, x_init, beta=1., n_sampel=4):
                     x_init, _ = model.reconstruct(z_var_q_arb, z_c_q_arb)
                     x_init = x_init.view(-1, model.in_size).to(device)
                     x_init = torch.clamp(x_init, 1.e-5, 1-1.e-5)
+                # BCE loss eqn from sec 3.2 in paper
                 RE_INV = RE_INV + torch.sum((z_var_q_arb - z_var_q)**2)
                 RE_INV = RE_INV + torch.sum((z_c_q_arb - z_c_q)**2) 
                 RE_INV = RE_INV - torch.sum((x_init*torch.log(x_rec) + (1-x_init)*torch.log(1-x_rec)))
@@ -93,6 +107,7 @@ def calc_loss(model, x, x_init, beta=1., n_sampel=4):
             RE_INV = torch.FloatTensor([0.]).to(device)
     else:
         raise NotImplementedError
+    
 
     if z_var_q.size()[0] == 0:
         log_q_z_var, log_p_z_var = torch.FloatTensor([0.]).to(device), torch.FloatTensor([0.]).to(device)
@@ -111,15 +126,22 @@ def calc_loss(model, x, x_init, beta=1., n_sampel=4):
         log_q_z_c = -torch.sum(0.5*(1 + z_c_q_logvar/model.latent_z_c + \
                                        (model.latent_z_c -1)*z_c_q**2/model.latent_z_c))
         log_p_z_c = -torch.sum(0.5*(z_c_q**2 )) + torch.sum(z_c_q)/model.latent_z_c
-
+    #  Overall reconstruction likelihood
     likelihood = - (RE + RE_INV)/x.shape[0]
+    # Posterior for different components of the latent space
     divergence_c = (log_q_z_c - log_p_z_c)/x.shape[0]
     divergence_var_tau = (log_q_z_var - log_p_z_var)/x.shape[0]  + (log_q_tau - log_p_tau)/x.shape[0]
 
-
+    # ELBO loss
     loss = - likelihood + beta * divergence_var_tau + divergence_c
     return loss, RE/x.shape[0], divergence_var_tau, divergence_c
 
+
+'''
+Function train_epoch:
+    - train the model on the test set
+    - return the train loss, test reconstruction error, train KL divergence for the variational distribution, train KL divergence for the categorical distribution
+'''
 
 def train_epoch(data, model, optim, epoch, num_epochs, N, beta):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -146,7 +168,11 @@ def train_epoch(data, model, optim, epoch, num_epochs, N, beta):
         print(line, end = '\r', file=sys.stderr)
     print(' ' * 80, end = '\r', file=sys.stderr)
     return train_loss/c, train_reco_loss/c, train_div_var_tau/c, train_div_c/c
-
+'''
+Function test_epoch:
+    - test the model on the test set
+    - return the test loss, test reconstruction error, test KL divergence for the variational distribution, test KL divergence for the categorical distribution
+'''
 
 def test_epoch(data, model, beta):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -168,7 +194,10 @@ def test_epoch(data, model, beta):
         train_div_c += divergence_c.item()
     return train_loss/c, train_reco_loss/c, train_div_var_tau/c, train_div_c/c
 
-
+'''
+Function load_fold:
+    - Load the dataset for a fold to the dataloader class.
+'''
 def load_fold(n):
     mnist_SE2 = np.load('/content/Saver/se2_fold'+str(n)+'.npy')
     mnist_SE2_test = np.load('/content/Saver/se2_test_fold'+str(n)+'.npy')[:1000]
@@ -197,7 +226,7 @@ def train(n,params, args,
     num_epochs = int(args.nEpochs)
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
+    # Calling the model to an object
     tag = str(args.tag)
     model = MCEVAE(in_size=in_size,
                     aug_dim=aug_dim,
@@ -219,6 +248,7 @@ def train(n,params, args,
     lr = 1e-3
     optim = torch.optim.Adam(model.parameters(), lr=lr)
     
+    # Load the dataset for the nth fold.
     train_data, test_data = load_fold(n)
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')    
@@ -252,17 +282,20 @@ def train(n,params, args,
     print('Test data  ',vv)
     RE_best = 10000
     output = sys.stdout
+    # Training for each epoch.
     for epoch in range(num_epochs):
         train_loss, train_RE, train_div_var_tau, train_div_c = train_epoch(train_data, model, 
                                                                            optim, epoch, num_epochs, N, beta)
         line = '\t'.join([str(epoch + 1), 'train', str(train_loss), str(train_RE), str(train_div_var_tau), str(train_div_c)])
         print(line, file=output)
         output.flush()
+        #storing the test loss record for each epoch for plots.
         train_loss_record[n_trainrecord_old + epoch] = train_RE
         test_loss, test_RE, test_div_var_tau, test_div_c = test_epoch(test_data, model, beta) 
         line = '\t'.join([str(epoch + 1), 'test', str(test_loss), str(test_RE), str(test_div_var_tau), str(test_div_c)])
         print(line, file=output)
         output.flush()
+        #storing the test loss record for each epoch for plots.
         test_loss_record[n_testrecord_old + epoch] = test_RE
         if abs(RE_best) > abs(train_RE):
             RE_best = train_RE
@@ -270,6 +303,7 @@ def train(n,params, args,
                      'state_dict': model.state_dict(),
                      'optimizer': optim.state_dict()}
             if save_model:
+                # Saving the model.
                 torch.save(state, 'models/' + modelname)
     #         torch.save(state, 'models/' + modelname)
     # print('saving...')
@@ -277,8 +311,14 @@ def train(n,params, args,
     # np.save('losses/testloss_' + modelname.replace("_checkpoint", ""), test_loss_record)
     ptt=[n,train_loss, train_RE, train_div_var_tau, train_div_c,test_loss, test_RE, test_div_var_tau, test_div_c]
     myTable.add_row(ptt)
+    # Return the best reconstruction error to be fed to the optuna objective functon.
     return RE_best
 
+
+'''
+Func finaltrain:
+    - This function is used to train the model using the entire training set
+'''
 def finaltrain(params, args, 
           tr_mode='new', beta = 1.0, save_model= False):
     c = '/content/'
@@ -388,14 +428,21 @@ def finaltrain(params, args,
     # np.save('losses/testloss_' + modelname.replace("_checkpoint", ""), test_loss_record)
     return RE_best
 
+'''
+funct: objective
+    - The objective function for optimization by optuna 
+'''
 def objective(trial):
     narr = [1,2,3,4]
+    # Setting the range for hyperparameters
     params = {
         "hidden_z_c": trial.suggest_int("hidden_z_c",200,512),
         "hidden_z_var": trial.suggest_int("hidden_z_var",200,512),
         "hidden_tau": trial.suggest_int("hidden_tau",32,128)
     }
     all_train_losses = []
+    # K fold cross validation implementation
+    # training the model for 4 folds and averaging the results.
     for i in narr:
         print("Fold ", i)
         RE_best = train(i,params,args, save_model=False)
@@ -403,7 +450,7 @@ def objective(trial):
     return np.mean(all_train_losses)
 
         
-
+# Main function
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--transformation", help = "Transformation type: use so2 or se2", default = "so2")
@@ -426,16 +473,22 @@ if __name__ == '__main__':
     
     myTable = PrettyTable(['Fold', 'train_loss (ELBO)', 'train_RE (Reco Error)', 'train_div_var_tau (Disent KL)', 'train_div_c (Ent KL)','test_loss', 'test_RE', 'test_div_var_tau', 'test_div_c']) 
     
+    # setting the  dimensions of the input image
     in_size = aug_dim = 28*28
     mode = transformation.upper()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # Creating an object of the optuna study
+    # Running the study for 15 trials
     study = optuna.create_study(direction='minimize')
-    study.optimize(objective, n_trials=100)
+    study.optimize(objective, n_trials=15)
     print('best trial:')
+    # Getting the best trial parameters from the study.
     trial_ = study.best_trial
+    # Printing the best parameters.
     print('values',trial_.values)
     print('params',trial_.params)
+    # Training the model with the best parameters on the entire train set/test set.
     scr = finaltrain(trial_.params,args,save_model=True)
     print('Final train Reconstruction error:',scr)  
 

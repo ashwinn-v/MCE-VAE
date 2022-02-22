@@ -67,6 +67,12 @@ class GatedDense(nn.Module):
 #     result = kernel.sum() - kernel.diag().sum()
 #     return result
 
+'''
+Func: load_checkpoint
+
+    - Function to load the model checkpoint if it exists.
+'''
+
 def load_checkpoint(model, optimizer, filename='checkpoint.pth.tar'):
     # Note: Input model & optimizer should be pre-defined.  This routine only updates their states.
     start_epoch = 0

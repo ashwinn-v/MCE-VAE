@@ -166,12 +166,12 @@ class MCEVAE(Model):
                 nn.ELU(),
                 nn.ConvTranspose2d(16, out_dim, kernel_size=3, stride=1, padding=1,  output_padding=0, bias=True)
             )
-
+    # Get encoded input from the encoder network.
     def aug_encoder(self, x):
         x = self.aug_enc(x)
         z_aug = x.view(-1, self.aug_dim)
         return z_aug
-
+    # Get mean and variance of the variational extractor network
     def q_z_var(self, z_aug):
         if self.latent_z_var == 0:
             return torch.FloatTensor([]), torch.FloatTensor([])
@@ -179,7 +179,7 @@ class MCEVAE(Model):
         z_var_q_logvar = self.q_z_var_logvar(z_aug)
         return z_var_q_mu, z_var_q_logvar
     
-    
+    # Get mean and variance of the Multi cluster extractor network
     def q_z_c(self, z_aug):
         if self.latent_z_c == 0:
             return torch.FloatTensor([]), torch.FloatTensor([]), torch.FloatTensor([]) 
@@ -187,7 +187,7 @@ class MCEVAE(Model):
         z_c_q_logvar = self.q_z_c_logvar(z_aug)
         return z_c_q_mu, z_c_q_logvar, torch.FloatTensor([])
 
-    
+    # Get mean and variance of the equivariance extractor network
     def q_tau(self, z_aug):
         if self.tau_size == 0:
             return torch.FloatTensor([]), torch.FloatTensor([])
@@ -195,7 +195,7 @@ class MCEVAE(Model):
         tau_q_logvar = self.tau_logvar(z_aug)
         return tau_q_mu, tau_q_logvar
 
-
+    # Get parameters fir transform.
     def get_M(self, tau):
         if self.tau_size == 0:
             return 1., 0.
@@ -237,7 +237,7 @@ class MCEVAE(Model):
             params[:, 0] = tau[:, 0]
             params[:, 1:3] = M[:, :, 2]
         return M, params
-
+    # Function to reconstruct the orignal image from clustering and variational latent variable.
     def reconstruct(self, z_var, z_c):
         # concatenating the vectors of z_var and z_c
         z = torch.cat((z_var, z_c), dim=1)
@@ -253,6 +253,7 @@ class MCEVAE(Model):
         x_rec = torch.clamp(x_mean, min=x_min, max=x_max)
         return x_rec, 0.
 
+    # Fucntion for applying the transformation to the input image
     def transform(self, x, M, direction='forward', padding_mode='zeros'):
         if self.tau_size == 0:
             return x
@@ -269,7 +270,7 @@ class MCEVAE(Model):
         grid = F.affine_grid(M, x.size(),align_corners=False).to(self.device)
         x = F.grid_sample(x, grid, padding_mode=padding_mode, align_corners=False)
         return x
-    
+    # forward pass of the model
     def forward(self, x):
         z_aug = self.aug_encoder(x)
         z_var_q_mu, z_var_q_logvar = self.q_z_var(z_aug)
@@ -284,7 +285,7 @@ class MCEVAE(Model):
         x_hat = self.transform(x_rec, M, direction='forward')
         return x_hat, z_var_q, z_var_q_mu, z_var_q_logvar, z_c_q, z_c_q_mu, z_c_q_logvar, z_c_q_L, tau_q, tau_q_mu, tau_q_logvar, x_rec, M
         
-
+    #  add random tau transform  to the input.
     def get_x_ref(self, x, tau_q):
         noise = (torch.rand_like(tau_q) - 1)*0.5 + 0.25
         noise[:,0] = (torch.rand(noise.shape[0]) - 1)*2*np.pi + np.pi
