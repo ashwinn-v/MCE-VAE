@@ -130,8 +130,9 @@ def plot_grad_flow(named_parameters):
     for n, p in named_parameters:
         if(p.requires_grad) and ("bias" not in n):
             layers.append(n)
-            ave_grads.append(p.grad.abs().mean())
-            max_grads.append(p.grad.abs().max())
+            ave_grads.append(p.grad.abs().mean().cpu())
+            max_grads.append(p.grad.abs().max().cpu())
+    print(ave_grads)
     plt.bar(np.arange(len(max_grads)), max_grads, alpha=0.1, lw=1, color="c")
     plt.bar(np.arange(len(max_grads)), ave_grads, alpha=0.1, lw=1, color="b")
     plt.hlines(0, 0, len(ave_grads)+1, lw=2, color="k" )
@@ -160,6 +161,7 @@ def train_epoch(data, model, optim, epoch, num_epochs, N, beta):
         optim.zero_grad()
         loss, reco_loss, divergence_var_tau, divergence_c = calc_loss(model, x, x_init, beta = beta)
         loss.backward()
+        plot_grad_flow(model.named_parameters())
         optim.step()
         c += 1
         train_loss += loss.item()
