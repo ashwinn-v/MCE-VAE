@@ -132,7 +132,7 @@ def plot_grad_flow(named_parameters):
             layers.append(n)
             ave_grads.append(p.grad.abs().mean().cpu())
             max_grads.append(p.grad.abs().max().cpu())
-    print(ave_grads)
+    # print(ave_grads)
     plt.bar(np.arange(len(max_grads)), max_grads, alpha=0.1, lw=1, color="c")
     plt.bar(np.arange(len(max_grads)), ave_grads, alpha=0.1, lw=1, color="b")
     plt.hlines(0, 0, len(ave_grads)+1, lw=2, color="k" )
@@ -146,6 +146,23 @@ def plot_grad_flow(named_parameters):
     plt.legend([Line2D([0], [0], color="c", lw=4),
                 Line2D([0], [0], color="b", lw=4),
                 Line2D([0], [0], color="k", lw=4)], ['max-gradient', 'mean-gradient', 'zero-gradient'])
+    plt.savefig('/content/MCE-VAE/grad_flow.png', bbox_inches='tight')
+
+# def plot_grad_flow(named_parameters):
+#     ave_grads = []
+#     layers = []
+#     for n, p in named_parameters:
+#         if(p.requires_grad) and ("bias" not in n):
+#             layers.append(n)
+#             ave_grads.append(p.grad.abs().mean().cpu())
+#     plt.plot(ave_grads, alpha=0.3, color="b")
+#     plt.hlines(0, 0, len(ave_grads)+1, linewidth=1, color="k" )
+#     plt.xticks(range(0,len(ave_grads), 1), layers, rotation="vertical")
+#     plt.xlim(xmin=0, xmax=len(ave_grads))
+#     plt.xlabel("Layers")
+#     plt.ylabel("average gradient")
+#     plt.title("Gradient flow")
+#     plt.grid(True)
 
 def train_epoch(data, model, optim, epoch, num_epochs, N, beta):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -245,6 +262,7 @@ def train(model, optim, train_data, test_data, num_epochs=20,
                      'optimizer': optim.state_dict()}
             torch.save(state, 'models/' + modelname)
     print('saving...')
+    plt.savefig('/content/MCE-VAE/gradplot.png', bbox_inches='tight')
     np.save('losses/trainloss_' + modelname.replace("_checkpoint", ""), train_loss_record)
     np.save('losses/testloss_' + modelname.replace("_checkpoint", ""), test_loss_record)
 
