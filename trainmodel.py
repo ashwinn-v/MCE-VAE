@@ -146,7 +146,6 @@ def plot_grad_flow(named_parameters):
     plt.legend([Line2D([0], [0], color="c", lw=4),
                 Line2D([0], [0], color="b", lw=4),
                 Line2D([0], [0], color="k", lw=4)], ['max-gradient', 'mean-gradient', 'zero-gradient'])
-    plt.savefig('/content/MCE-VAE/grad_flow.png', bbox_inches='tight')
 
 # def plot_grad_flow(named_parameters):
 #     ave_grads = []
@@ -179,6 +178,7 @@ def train_epoch(data, model, optim, epoch, num_epochs, N, beta):
         loss, reco_loss, divergence_var_tau, divergence_c = calc_loss(model, x, x_init, beta = beta)
         loss.backward()
         plot_grad_flow(model.named_parameters())
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.05)
         optim.step()
         c += 1
         train_loss += loss.item()
