@@ -133,6 +133,7 @@ def calc_loss(model, x, x_init, beta=1., n_sampel=4):
     divergence_var_tau = (log_q_z_var - log_p_z_var)/x.shape[0]  + (log_q_tau - log_p_tau)/x.shape[0]
 
     # ELBO loss
+    # -D(RE_INV<bce>) + beta * divergence_var_tau + divergence_c
     loss = - likelihood + beta * divergence_var_tau + divergence_c
     return loss, RE/x.shape[0], divergence_var_tau, divergence_c
 
