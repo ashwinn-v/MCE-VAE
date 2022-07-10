@@ -211,10 +211,10 @@ def train(model, optim, train_data, test_data, num_epochs=20,
             state = {'epoch': epoch + 1,
                      'state_dict': model.state_dict(),
                      'optimizer': optim.state_dict()}
-            torch.save(state, 'models/' + modelname)
+            torch.save(state, '/content/MCE-VAE/checkpoint')
     print('saving...')
-    np.save('losses/trainloss_' + modelname.replace("_checkpoint", ""), train_loss_record)
-    np.save('losses/testloss_' + modelname.replace("_checkpoint", ""), test_loss_record)
+    # np.save('losses/trainloss_' + modelname.replace("_checkpoint", ""), train_loss_record)
+    # np.save('losses/testloss_' + modelname.replace("_checkpoint", ""), test_loss_record)
 
 
 if __name__ == '__main__':

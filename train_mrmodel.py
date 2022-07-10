@@ -76,15 +76,15 @@ def calc_loss(model, x, x_init, beta=1., n_sampel=4):
                 with torch.no_grad():
                     x_arb = model.get_x_ref(x.view(-1,1,int(np.sqrt(model.in_size)),int(np.sqrt(model.in_size))), tau_q)
                     z_aug_arb = model.aug_encoder(x_arb)
-                    z_c_q_mu_arb, z_c_q_logvar_arb, _ = model.q_z_c(z_aug_arb)
-                    z_c_q_arb = model.reparameterize(z_c_q_mu_arb, z_c_q_logvar_arb).to(device)
+                    # z_c_q_mu_arb, z_c_q_logvar_arb, _ = model.q_z_c(z_aug_arb)
+                    # z_c_q_arb = model.reparameterize(z_c_q_mu_arb, z_c_q_logvar_arb).to(device)
                     z_var_q_mu_arb, z_var_q_logvar_arb = model.q_z_var(z_aug_arb)
                     z_var_q_arb = model.reparameterize(z_var_q_mu_arb, z_var_q_logvar_arb).to(device)
-                    x_init, _ = model.reconstruct(z_var_q_arb, z_c_q_arb)
+                    x_init, _ = model.reconstruct_b(z_var_q_arb)
                     x_init = x_init.view(-1, model.in_size).to(device)
                     x_init = torch.clamp(x_init, 1.e-5, 1-1.e-5)
                 RE_INV = RE_INV + torch.sum((z_var_q_arb - z_var_q)**2)
-                RE_INV = RE_INV + torch.sum((z_c_q_arb - z_c_q)**2) 
+                # RE_INV = RE_INV + torch.sum((z_c_q_arb - z_c_q)**2) 
                 RE_INV = RE_INV - torch.sum((x_init*torch.log(x_rec) + (1-x_init)*torch.log(1-x_rec)))
             RE_INV = RE_INV/25.0
         else:
@@ -103,20 +103,26 @@ def calc_loss(model, x, x_init, beta=1., n_sampel=4):
     else:
         log_q_tau = -torch.sum(0.5*(1 + tau_q_logvar))
         log_p_tau = -torch.sum(0.5*(tau_q**2 ))
-    if z_c_q.size()[0] == 0:
-        log_q_z_c, log_p_z_c = torch.FloatTensor([0.]).to(device), torch.FloatTensor([0.]).to(device)
-    else:
-        log_q_z_c = -torch.sum(0.5*(1 + z_c_q_logvar/model.latent_z_c + \
-                                       (model.latent_z_c -1)*z_c_q**2/model.latent_z_c))
-        log_p_z_c = -torch.sum(0.5*(z_c_q**2 )) + torch.sum(z_c_q)/model.latent_z_c
+    # if z_c_q.size()[0] == 0:
+    #     log_q_z_c, log_p_z_c = torch.FloatTensor([0.]).to(device), torch.FloatTensor([0.]).to(device)
+    # else:
+    #     log_q_z_c = -torch.sum(0.5*(1 + z_c_q_logvar/model.latent_z_c + \
+    #                                    (model.latent_z_c -1)*z_c_q**2/model.latent_z_c))
+    #     log_p_z_c = -torch.sum(0.5*(z_c_q**2 )) + torch.sum(z_c_q)/model.latent_z_c
 
     likelihood = - (RE + RE_INV)/x.shape[0]
-    divergence_c = (log_q_z_c - log_p_z_c)/x.shape[0]
+    # divergence_c = (log_q_z_c - log_p_z_c)/x.shape[0]
     divergence_var_tau = (log_q_z_var - log_p_z_var)/x.shape[0]  + (log_q_tau - log_p_tau)/x.shape[0]
 
+    divergence_var = (log_q_z_var - log_p_z_var)/x.shape[0]
+    divergence_tau =  (log_q_tau - log_p_tau)/x.shape[0]
 
-    loss = - likelihood + beta * divergence_var_tau + divergence_c
-    return loss, RE/x.shape[0], divergence_var_tau, divergence_c
+
+    # loss = - likelihood + beta * divergence_var_tau + divergence_c
+    # return loss, RE/x.shape[0], divergence_var_tau, divergence_c
+    # loss = - likelihood + beta * divergence_var_tau 
+    loss = - likelihood + beta * (divergence_var+divergence_tau)
+    return loss, RE/x.shape[0], divergence_var, divergence_tau
 
 
 def plot_grad_flow(named_parameters):
