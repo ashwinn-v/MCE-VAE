@@ -190,7 +190,7 @@ def train(model, optim, train_data, test_data, num_epochs=20,
         train_loss_record = np.zeros(num_epochs)
         test_loss_record = np.zeros(num_epochs)
     print('training...')
-    N = len(train_data)
+    N = len(f)
     print('Training data  ',N)
     RE_best = 10000
     output = sys.stdout

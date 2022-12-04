@@ -293,4 +293,3 @@ class MCEVAE(Model):
         M_n, params_n = self.get_M(noise)
         x_ref_trans = self.transform(x, M_n, direction='forward')
         return x_ref_trans
-

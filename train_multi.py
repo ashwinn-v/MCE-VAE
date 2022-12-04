@@ -118,6 +118,7 @@ def calc_loss(model, x, x_init, beta=1., n_sampel=4):
     return loss, RE/x.shape[0], divergence_var_tau, divergence_c, x_rec 
 
 
+
 def train_epoch(data, model, optim, epoch, num_epochs, N, beta):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.train()

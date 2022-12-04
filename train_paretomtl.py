@@ -300,7 +300,7 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
             b = x.size(0)
             x = x.view(-1, 1, int(np.sqrt(model.in_size)), int(np.sqrt(model.in_size))).to(device).float()
             loss, reco_loss, divergence_var_tau, divergence_c = calc_loss(model, x, x_init, beta = beta)
-            task_loss = torch.stack([loss, reco_loss, divergence_var_tau, divergence_c])
+            task_loss = torch.stack([reco_loss, divergence_var_tau, divergence_c])
             # obtain and store the gradient value
             for i in range(n_tasks):
                 optimizer.zero_grad()
@@ -308,7 +308,7 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
                 
                 # optim.zero_grad()
                 
-                loss.backward()
+                # loss.backward()
 
 
 
@@ -323,152 +323,150 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
                     if param.grad is not None:
                         grads[i].append(Variable(param.grad.data.clone().flatten(), requires_grad=False))
 
-                train_loss += loss.item()
-                train_reco_loss += reco_loss.item()
-                train_div_var_tau += divergence_var_tau.item()
-                train_div_c += divergence_c.item()
-                template = '# [{}/{}] training {:.1%}, ELBO={:.5f}, Reco Error={:.5f}, Disent KL={:.5f}, Ent KL={:.5f}'
-                line = template.format(epoch + 1, num_epochs, c / N, train_loss/c, train_reco_loss/c, train_div_var_tau/c, train_div_c/c)
-                print(line, end = '\r', file=sys.stderr)
+                # train_loss += loss.item()
+                # train_reco_loss += reco_loss.item()
+                # train_div_var_tau += divergence_var_tau.item()
+                # train_div_c += divergence_c.item()
+                # template = '# [{}/{}] training {:.1%}, ELBO={:.5f}, Reco Error={:.5f}, Disent KL={:.5f}, Ent KL={:.5f}'
+                # line = template.format(epoch + 1, num_epochs, c / N, train_loss/c, train_reco_loss/c, train_div_var_tau/c, train_div_c/c)
+                # print(line, end = '\r', file=sys.stderr)
 
                 
         
-        grads_list = [torch.cat(grads[i]) for i in range(len(grads))]
-        grads = torch.stack(grads_list)
+            grads_list = [torch.cat(grads[i]) for i in range(len(grads))]
+            grads = torch.stack(grads_list)
         
-        # calculate the weights
-        losses_vec = torch.stack(losses_vec)
-        flag, weight_vec = get_d_paretomtl_init(grads,losses_vec,ref_vec,pref_idx)
+            # calculate the weights
+            losses_vec = torch.stack(losses_vec)
+            flag, weight_vec = get_d_paretomtl_init(grads,losses_vec,ref_vec,pref_idx)
         
-        # early stop once a feasible solution is obtained
-        if flag == True:
-            print("fealsible solution is obtained.")
-            break
+            # early stop once a feasible solution is obtained
+            if flag == True:
+                print("fealsible solution is obtained.")
+                break
         
-        # optimization step
-        optimizer.zero_grad()
-        for i in range(len(task_loss)):
-            task_loss = model(X, ts)
-            if i == 0:
-                loss_total = weight_vec[i] * task_loss[i]
-            else:
-                loss_total = loss_total + weight_vec[i] * task_loss[i]
-        
-        loss_total.backward()
-        optimizer.step()
+            # optimization step
                 
-        # else:
-        # # continue if no feasible solution is found
-        #     continue
-        # # break the loop once a feasible solutions is found
-        # break
-                
+            for i in range(len(task_loss)):
+                    optimizer.zero_grad()
+                    task_loss = model(X, ts)
+                    if i == 0:
+                        loss_total = weight_vec[i] * task_loss[i]
+                    else:
+                        loss_total = loss_total + weight_vec[i] * task_loss[i]
+            
+            loss_total.backward()
+            optimizer.step()
+            
+        else:
+        # continue if no feasible solution is found
+            continue
+        # break the loop once a feasible solutions is found
+        break
+                    
         
 
-    # run niter epochs of ParetoMTL 
     for t in range(niter):
         
         # scheduler.step()
       
-        model.train()
-        # for (it, batch) in enumerate(train_loader):
-        
-        X = batch[0]
-        ts = batch[1]
-        if torch.cuda.is_available():
-            X = X.cuda()
-            ts = ts.cuda()
+        for (x, x_init) in trans_loader:
+            b = x.size(0)
+            x = x.view(-1, 1, int(np.sqrt(model.in_size)), int(np.sqrt(model.in_size))).to(device).float()
+            loss, reco_loss, divergence_var_tau, divergence_c = calc_loss(model, x, x_init, beta = beta)
+            task_loss = torch.stack([reco_loss, divergence_var_tau, divergence_c])
+            # obtain and store the gradient value
+            # obtain and store the gradient 
+            grads = {}
+            losses_vec = []
+            
+            for i in range(n_tasks):
+                optimizer.zero_grad()
+                # task_loss = model(X, ts) 
+                losses_vec.append(task_loss[i].data)
+                
+                task_loss[i].backward()
+            
+                # can use scalable method proposed in the MOO-MTL paper for large scale problem
+                # but we keep use the gradient of all parameters in this experiment              
+                grads[i] = []
+                for param in model.parameters():
+                    if param.grad is not None:
+                        grads[i].append(Variable(param.grad.data.clone().flatten(), requires_grad=False))
 
-        # obtain and store the gradient 
-        grads = {}
-        losses_vec = []
-        
-        for i in range(n_tasks):
+                
+                
+            grads_list = [torch.cat(grads[i]) for i in range(len(grads))]
+            grads = torch.stack(grads_list)
+            
+            # calculate the weights
+            losses_vec = torch.stack(losses_vec)
+            weight_vec = get_d_paretomtl(grads,losses_vec,ref_vec,pref_idx)
+            
+            normalize_coeff = n_tasks / torch.sum(torch.abs(weight_vec))
+            weight_vec = weight_vec * normalize_coeff
+            
+            # optimization step
             optimizer.zero_grad()
-            task_loss= train_epoch(trans_loader,model, optimizer, epoch, nEpochs, N, beta)
-            losses_vec.append(task_loss[i].data)
+            for i in range(len(task_loss)):
+                loss, reco_loss, divergence_var_tau, divergence_c = calc_loss(model, x, x_init, beta = beta)
+                task_loss = torch.stack([reco_loss, divergence_var_tau, divergence_c])
+                if i == 0:
+                    loss_total = weight_vec[i] * task_loss[i]
+                else:
+                    loss_total = loss_total + weight_vec[i] * task_loss[i]
             
-            task_loss[i].backward()
-        
-            # can use scalable method proposed in the MOO-MTL paper for large scale problem
-            # but we keep use the gradient of all parameters in this experiment              
-            grads[i] = []
-            for param in model.parameters():
-                if param.grad is not None:
-                    grads[i].append(Variable(param.grad.data.clone().flatten(), requires_grad=False))
-
-            
-            
-        grads_list = [torch.cat(grads[i]) for i in range(len(grads))]
-        grads = torch.stack(grads_list)
-        
-        # calculate the weights
-        losses_vec = torch.stack(losses_vec)
-        weight_vec = get_d_paretomtl(grads,losses_vec,ref_vec,pref_idx)
-        
-        normalize_coeff = n_tasks / torch.sum(torch.abs(weight_vec))
-        weight_vec = weight_vec * normalize_coeff
-        
-        # optimization step
-        optimizer.zero_grad()
-        for i in range(len(task_loss)):
-            task_loss = model(X, ts)
-            if i == 0:
-                loss_total = weight_vec[i] * task_loss[i]
-            else:
-                loss_total = loss_total + weight_vec[i] * task_loss[i]
-        
-        loss_total.backward()
-        optimizer.step()
+            loss_total.backward()
+            optimizer.step()
 
 
-    #     # calculate and record performance
-    #     if t == 0 or (t + 1) % 2 == 0:
+        # # calculate and record performance
+        # if t == 0 or (t + 1) % 2 == 0:
             
-    #         model.eval()
-    #         with torch.no_grad():
+        #     model.eval()
+        #     with torch.no_grad():
   
-    #             total_train_loss = []
-    #             train_acc = []
+        #         total_train_loss = []
+        #         train_acc = []
         
-    #             correct1_train = 0
-    #             correct2_train = 0
+        #         correct1_train = 0
+        #         correct2_train = 0
                 
-    #             for (it, batch) in enumerate(train_loader):
+        #         for (it, batch) in enumerate(train_loader):
                    
-    #                 X = batch[0]
-    #                 ts = batch[1]
-    #                 if torch.cuda.is_available():
-    #                     X = X.cuda()
-    #                     ts = ts.cuda()
+        #             X = batch[0]
+        #             ts = batch[1]
+        #             if torch.cuda.is_available():
+        #                 X = X.cuda()
+        #                 ts = ts.cuda()
         
-    #                 valid_train_loss = model(X, ts)
-    #                 total_train_loss.append(valid_train_loss)
-    #                 output1 = model.model(X).max(2, keepdim=True)[1][:,0]
-    #                 output2 = model.model(X).max(2, keepdim=True)[1][:,1]
-    #                 correct1_train += output1.eq(ts[:,0].view_as(output1)).sum().item()
-    #                 correct2_train += output2.eq(ts[:,1].view_as(output2)).sum().item()
+        #             valid_train_loss = model(X, ts)
+        #             total_train_loss.append(valid_train_loss)
+        #             output1 = model.model(X).max(2, keepdim=True)[1][:,0]
+        #             output2 = model.model(X).max(2, keepdim=True)[1][:,1]
+        #             correct1_train += output1.eq(ts[:,0].view_as(output1)).sum().item()
+        #             correct2_train += output2.eq(ts[:,1].view_as(output2)).sum().item()
                     
                     
-    #             train_acc = np.stack([1.0 * correct1_train / len(train_loader.dataset),1.0 * correct2_train / len(train_loader.dataset)])
+        #         train_acc = np.stack([1.0 * correct1_train / len(train_loader.dataset),1.0 * correct2_train / len(train_loader.dataset)])
         
-    #             total_train_loss = torch.stack(total_train_loss)
-    #             average_train_loss = torch.mean(total_train_loss, dim = 0)
+        #         total_train_loss = torch.stack(total_train_loss)
+        #         average_train_loss = torch.mean(total_train_loss, dim = 0)
                 
             
-    #         # record and print
-    #         if torch.cuda.is_available():
+            # record and print
+            if torch.cuda.is_available():
                 
-    #             task_train_losses.append(average_train_loss.data.cpu().numpy())
-    #             train_accs.append(train_acc)
+                task_train_losses.append(average_train_loss.data.cpu().numpy())
+                train_accs.append(train_acc)
                 
-    #             weights.append(weight_vec.cpu().numpy())
+                weights.append(weight_vec.cpu().numpy())
                 
-    #             print('{}/{}: weights={}, train_loss={}, train_acc={}'.format(
-    #                     t + 1, niter,  weights[-1], task_train_losses[-1],train_accs[-1]))                 
+                print('{}/{}: weights={}, train_loss={}, train_acc={}'.format(
+                        t + 1, niter,  weights[-1], task_train_losses[-1],train_accs[-1]))                 
                
 
-    # torch.save(model.model.state_dict(), './saved_model/%s_%s_niter_%d_npref_%d_prefidx_%d.pickle'%(dataset, base_model, niter, npref, pref_idx))
+    torch.save(model.model.state_dict(), './saved_model/%s_%s_niter_%d_npref_%d_prefidx_%d.pickle'%(dataset, base_model, niter, npref, pref_idx))
 
     
 
