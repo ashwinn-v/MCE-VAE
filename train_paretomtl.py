@@ -1,3 +1,5 @@
+import pdb
+import pickle
 import numpy as np
 import torch.nn.functional as F
 from MCEVAE import MCEVAE
@@ -7,14 +9,10 @@ import torch.utils.data
 import torch.nn as nn
 from torch.autograd import Variable
 import sys
-
+from min_norm_solvers import MinNormSolver
 # from model_lenet import RegressionModel, RegressionTrain
 # from model_resnet import MnistResNet, RegressionTrainResNet
 
-from min_norm_solvers import MinNormSolver
-
-import pickle
-import pdb
 
 
 def get_d_paretomtl_init(grads,value,weights,i):
@@ -198,6 +196,7 @@ def train_epoch(data, model, optim, epoch, num_epochs, N, beta):
         loss, reco_loss, divergence_var_tau, divergence_c = calc_loss(model, x, x_init, beta = beta)
         loss.backward()
         # optim.step()
+        # pdb.set_trace
         c += 1
         train_loss += loss.item()
         train_reco_loss += reco_loss.item()
@@ -208,7 +207,7 @@ def train_epoch(data, model, optim, epoch, num_epochs, N, beta):
         print(line, end = '\r', file=sys.stderr)
     print(' ' * 80, end = '\r', file=sys.stderr)
     a = [train_reco_loss/c, train_div_var_tau/c, train_div_c/c]
-    pdb.set_trace()
+    # pdb.set_trace()
     task_loss = torch.stack(a)
     
     return task_loss
@@ -217,7 +216,7 @@ def train_epoch(data, model, optim, epoch, num_epochs, N, beta):
 def train(dataset, base_model, niter, npref, init_weight, pref_idx):
 
     # generate #npref preference vectors      
-    n_tasks = 3
+    n_tasks = 2
     ref_vec = torch.tensor(circle_points([1], [npref])[0]).float()
     
     # load dataset 
@@ -243,10 +242,14 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
     print('loading data...')
     # c = '/content/'
     transformation = str(transformation).lower()
-    mnist_SE2 = np.load('./data/mnist_se2_train.npy')
-    mnist_SE2_test = np.load('./data/mnist_se2_test.npy')[:1000]
-    mnist_SE2_init = np.load('./data/mnist_init_se2_train.npy')
-    mnist_SE2_init_test = np.load('./data/mnist_init_se2_test.npy')[:1000]
+    mnist_SE2 = np.load('/Users/ashwinv/Desktop/data/mnist_se2_train.npy')
+    mnist_SE2_test = np.load('/Users/ashwinv/Desktop/data/mnist_se2_test.npy')[:1000]
+    mnist_SE2_init = np.load('/Users/ashwinv/Desktop/data/mnist_se2_init_train.npy')
+    mnist_SE2_init_test = np.load('/Users/ashwinv/Desktop/data/mnist_se2_init_test.npy')[:1000]
+    # mnist_SE2 = np.load('./data/mnist_se2_train.npy')
+    # mnist_SE2_test = np.load('./data/mnist_se2_test.npy')[:1000]
+    # mnist_SE2_init = np.load('./data/mnist_init_se2_train.npy')
+    # mnist_SE2_init_test = np.load('./data/mnist_init_se2_test.npy')[:1000]
 
     print('preparing dataset')
     batch_size = int(nBatch)
@@ -292,15 +295,17 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
         model.train()
     
 
-        grads = {}
-        losses_vec = []
+
         N = len(trans_loader)
         epoch = t
         for (x, x_init) in trans_loader:
+            grads = dict()
+            losses_vec = []
             b = x.size(0)
             x = x.view(-1, 1, int(np.sqrt(model.in_size)), int(np.sqrt(model.in_size))).to(device).float()
             loss, reco_loss, divergence_var_tau, divergence_c = calc_loss(model, x, x_init, beta = beta)
-            task_loss = torch.stack([reco_loss, divergence_var_tau, divergence_c])
+            #task_loss = torch.stack([reco_loss, divergence_var_tau, divergence_c])
+            task_loss = torch.stack([reco_loss, divergence_var_tau])
             # obtain and store the gradient value
             for i in range(n_tasks):
                 optimizer.zero_grad()
@@ -314,9 +319,9 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
 
                 losses_vec.append(task_loss[i].data)
                 
-                task_loss[i].backward()
+                task_loss[i].backward(retain_graph=True)
                 grads[i] = []
-                
+                # pdb.set_trace()
                 # can use scalable method proposed in the MOO-MTL paper for large scale problem
                 # but we keep use the gradient of all parameters in this experiment
                 for param in model.parameters():
@@ -337,19 +342,23 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
             grads = torch.stack(grads_list)
         
             # calculate the weights
+            
             losses_vec = torch.stack(losses_vec)
+            #pdb.set_trace()
             flag, weight_vec = get_d_paretomtl_init(grads,losses_vec,ref_vec,pref_idx)
         
-            # early stop once a feasible solution is obtained
-            if flag == True:
-                print("fealsible solution is obtained.")
-                break
+            # # early stop once a feasible solution is obtained
+            # if flag == True:
+            #     print("fealsible solution is obtained.")
+            #     break
         
             # optimization step
                 
             for i in range(len(task_loss)):
                     optimizer.zero_grad()
-                    task_loss = model(X, ts)
+                    loss, reco_loss, divergence_var_tau, divergence_c = calc_loss(model, x, x_init, beta = beta)
+                    #task_loss = torch.stack([reco_loss, divergence_var_tau, divergence_c])
+                    task_loss = torch.stack([reco_loss, divergence_var_tau])
                     if i == 0:
                         loss_total = weight_vec[i] * task_loss[i]
                     else:
@@ -374,7 +383,8 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
             b = x.size(0)
             x = x.view(-1, 1, int(np.sqrt(model.in_size)), int(np.sqrt(model.in_size))).to(device).float()
             loss, reco_loss, divergence_var_tau, divergence_c = calc_loss(model, x, x_init, beta = beta)
-            task_loss = torch.stack([reco_loss, divergence_var_tau, divergence_c])
+            #task_loss = torch.stack([reco_loss, divergence_var_tau, divergence_c])
+            task_loss = torch.stack([reco_loss, divergence_var_tau])
             # obtain and store the gradient value
             # obtain and store the gradient 
             grads = {}
@@ -385,7 +395,7 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
                 # task_loss = model(X, ts) 
                 losses_vec.append(task_loss[i].data)
                 
-                task_loss[i].backward()
+                task_loss[i].backward(retain_graph=True)
             
                 # can use scalable method proposed in the MOO-MTL paper for large scale problem
                 # but we keep use the gradient of all parameters in this experiment              
@@ -410,7 +420,8 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
             optimizer.zero_grad()
             for i in range(len(task_loss)):
                 loss, reco_loss, divergence_var_tau, divergence_c = calc_loss(model, x, x_init, beta = beta)
-                task_loss = torch.stack([reco_loss, divergence_var_tau, divergence_c])
+                #task_loss = torch.stack([reco_loss, divergence_var_tau, divergence_c])
+                task_loss = torch.stack([reco_loss, divergence_var_tau])
                 if i == 0:
                     loss_total = weight_vec[i] * task_loss[i]
                 else:
@@ -475,7 +486,7 @@ def run(dataset = 'mnist',base_model = 'lenet', niter = 100, npref = 5):
     run Pareto MTL
     """
     
-    init_weight = np.array([0.5 , 0.5 ])
+    init_weight = np.array([0.35 , 0.35 ,.3])
     
     for i in range(npref):
         
