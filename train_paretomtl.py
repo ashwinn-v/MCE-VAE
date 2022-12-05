@@ -10,6 +10,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 import sys
 from min_norm_solvers import MinNormSolver
+from tqdm import tqdm
 # from model_lenet import RegressionModel, RegressionTrain
 # from model_resnet import MnistResNet, RegressionTrainResNet
 
@@ -65,7 +66,7 @@ def get_d_paretomtl(grads,value,weights,i):
     # calculate the descent direction
     if torch.sum(idx) <= 0:
         sol, nd = MinNormSolver.find_min_norm_element([[grads[t]] for t in range(len(grads))])
-        return torch.tensor(sol).float()
+        return torch.tensor(sol).cuda().float()
 
 
     vec =  torch.cat((grads, torch.matmul(w[idx],grads)))
@@ -217,7 +218,7 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
 
     # generate #npref preference vectors      
     n_tasks = 2
-    ref_vec = torch.tensor(circle_points([1], [npref])[0]).float()
+    ref_vec = torch.tensor(circle_points([1], [npref])[0]).cuda().float()
     
     # load dataset 
     
@@ -242,14 +243,14 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
     print('loading data...')
     # c = '/content/'
     transformation = str(transformation).lower()
-    mnist_SE2 = np.load('/Users/ashwinv/Desktop/data/mnist_se2_train.npy')
-    mnist_SE2_test = np.load('/Users/ashwinv/Desktop/data/mnist_se2_test.npy')[:1000]
-    mnist_SE2_init = np.load('/Users/ashwinv/Desktop/data/mnist_se2_init_train.npy')
-    mnist_SE2_init_test = np.load('/Users/ashwinv/Desktop/data/mnist_se2_init_test.npy')[:1000]
-    # mnist_SE2 = np.load('./data/mnist_se2_train.npy')
-    # mnist_SE2_test = np.load('./data/mnist_se2_test.npy')[:1000]
-    # mnist_SE2_init = np.load('./data/mnist_init_se2_train.npy')
-    # mnist_SE2_init_test = np.load('./data/mnist_init_se2_test.npy')[:1000]
+    # mnist_SE2 = np.load('/Users/ashwinv/Desktop/data/mnist_se2_train.npy')
+    # mnist_SE2_test = np.load('/Users/ashwinv/Desktop/data/mnist_se2_test.npy')[:1000]
+    # mnist_SE2_init = np.load('/Users/ashwinv/Desktop/data/mnist_se2_init_train.npy')
+    # mnist_SE2_init_test = np.load('/Users/ashwinv/Desktop/data/mnist_se2_init_test.npy')[:1000]
+    mnist_SE2 = np.load('./data/mnist_se2_train.npy')
+    mnist_SE2_test = np.load('./data/mnist_se2_test.npy')[:1000]
+    mnist_SE2_init = np.load('./data/mnist_init_se2_train.npy')
+    mnist_SE2_init_test = np.load('./data/mnist_init_se2_test.npy')[:1000]
 
     print('preparing dataset')
     batch_size = int(nBatch)
@@ -282,6 +283,7 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
                      tag = tag).to(device)
     lr = 1e-3
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    
 
     # print the current preference vector
     print('Preference Vector ({}/{}):'.format(pref_idx + 1, npref))
@@ -293,20 +295,20 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
     for t in range(2):
       
         model.train()
-    
-
-
         N = len(trans_loader)
         epoch = t
-        for (x, x_init) in trans_loader:
+        for idx, (x, x_init) in tqdm(enumerate(trans_loader)):
+            x_init = x_init.to(device)
             grads = dict()
             losses_vec = []
             b = x.size(0)
             x = x.view(-1, 1, int(np.sqrt(model.in_size)), int(np.sqrt(model.in_size))).to(device).float()
             loss, reco_loss, divergence_var_tau, divergence_c = calc_loss(model, x, x_init, beta = beta)
+            
             #task_loss = torch.stack([reco_loss, divergence_var_tau, divergence_c])
             task_loss = torch.stack([reco_loss, divergence_var_tau])
             # obtain and store the gradient value
+            
             for i in range(n_tasks):
                 optimizer.zero_grad()
                 # task_loss= train_epoch(trans_loader,model, optimizer, epoch, nEpochs, N, beta)
@@ -314,8 +316,6 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
                 # optim.zero_grad()
                 
                 # loss.backward()
-
-
 
                 losses_vec.append(task_loss[i].data)
                 
@@ -353,16 +353,16 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
             #     break
         
             # optimization step
-                
+            optimizer.zero_grad()
             for i in range(len(task_loss)):
-                    optimizer.zero_grad()
-                    loss, reco_loss, divergence_var_tau, divergence_c = calc_loss(model, x, x_init, beta = beta)
-                    #task_loss = torch.stack([reco_loss, divergence_var_tau, divergence_c])
-                    task_loss = torch.stack([reco_loss, divergence_var_tau])
-                    if i == 0:
-                        loss_total = weight_vec[i] * task_loss[i]
-                    else:
-                        loss_total = loss_total + weight_vec[i] * task_loss[i]
+                    
+                loss, reco_loss, divergence_var_tau, divergence_c = calc_loss(model, x, x_init, beta = beta)
+                #task_loss = torch.stack([reco_loss, divergence_var_tau, divergence_c])
+                task_loss = torch.stack([reco_loss, divergence_var_tau])
+                if i == 0:
+                    loss_total = weight_vec[i] * task_loss[i]
+                else:
+                    loss_total = loss_total + weight_vec[i] * task_loss[i]
             
             loss_total.backward()
             optimizer.step()
@@ -378,11 +378,14 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
     for t in range(niter):
         
         # scheduler.step()
-      
+        total_loss = 0
+        total_reco = 0
         for (x, x_init) in trans_loader:
             b = x.size(0)
             x = x.view(-1, 1, int(np.sqrt(model.in_size)), int(np.sqrt(model.in_size))).to(device).float()
             loss, reco_loss, divergence_var_tau, divergence_c = calc_loss(model, x, x_init, beta = beta)
+            
+            # print("reco: ", reco_loss, )
             #task_loss = torch.stack([reco_loss, divergence_var_tau, divergence_c])
             task_loss = torch.stack([reco_loss, divergence_var_tau])
             # obtain and store the gradient value
@@ -429,6 +432,11 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
             
             loss_total.backward()
             optimizer.step()
+            total_reco += reco_loss.item()
+            total_loss += loss.item()
+
+        if t % 2 == 0:
+            print(f"epoch {t}: loss: {total_loss/len(trans_loader)} reco: {total_reco/len(trans_loader)}")
 
 
         # # calculate and record performance
@@ -468,13 +476,13 @@ def train(dataset, base_model, niter, npref, init_weight, pref_idx):
             # record and print
             if torch.cuda.is_available():
                 
-                task_train_losses.append(average_train_loss.data.cpu().numpy())
-                train_accs.append(train_acc)
+                # task_train_losses.append(average_train_loss.data.cpu().numpy())
+                # train_accs.append(train_acc)
                 
                 weights.append(weight_vec.cpu().numpy())
                 
-                print('{}/{}: weights={}, train_loss={}, train_acc={}'.format(
-                        t + 1, niter,  weights[-1], task_train_losses[-1],train_accs[-1]))                 
+                # print('{}/{}: weights={}, train_loss={}, train_acc={}'.format(
+                #         t + 1, niter,  weights[-1], task_train_losses[-1],train_accs[-1]))                 
                
 
     torch.save(model.model.state_dict(), './saved_model/%s_%s_niter_%d_npref_%d_prefidx_%d.pickle'%(dataset, base_model, niter, npref, pref_idx))
@@ -493,7 +501,7 @@ def run(dataset = 'mnist',base_model = 'lenet', niter = 100, npref = 5):
         pref_idx = i 
         train(dataset, base_model, niter, npref, init_weight, pref_idx)
         
-
+torch.cuda.set_device("cuda:0")
 
 run(dataset = 'mnist', base_model = 'lenet', niter = 100, npref = 5)
 #run(dataset = 'fashion', base_model = 'lenet', niter = 100, npref = 5)
